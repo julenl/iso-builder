@@ -1,0 +1,8 @@
+Package: iso-builder
+Architecture: all
+Maintainer: Julen Larrucea
+Depends: debconf (>= 0.5.00), rsync, genisoimage, fuseiso
+Priority: optional
+Version: 1.0-1
+Description: iso-builder is a python script for building customized/self installing GNU/Linux ISO files.
+ It extracts an original ISO file (def. Ubuntu) copies the content, adds kickstart files, edits the menus and rebuilds the content into a new ISO.
