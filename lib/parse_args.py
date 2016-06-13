@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-def ib_parser():
+def ib_parser(script_dir):
     import os,sys
     import re
     #print cmd_args
@@ -22,6 +22,8 @@ def ib_parser():
                         help="Show version and exit")
     group.add_argument("-y","--yes", action='store_true',
                         help="Answer 'Y' if prompted whether to overwrite the ks template.")
+    group.add_argument("-t","--test", action='store_true',
+                        help="Test resulting ISO by installing it into a KVM Virtual Machine.")
 
 
 
@@ -42,9 +44,9 @@ def ib_parser():
     group.add_argument("--template_name",
                         help="Name for the new kickstart template generated at the --loc_kickstart_dir. Def.: ks.cfg")
     group.add_argument("--iso_name",
-                        help="Name of the original ISO file. Def.: ubuntu-15.10-server-amd64.iso")
-    group.add_argument("--get_os",choices=['ubuntu-14.04.4', 'ubuntu-15.10', 'ubuntu-16.04'],
-                        help="Get server ISO for this Operative System. Def.: 'ubuntu'")
+                        help="Name of the original ISO file. Def.: ubuntu-16.04-server-amd64.iso")
+    group.add_argument("--get_os",choices=['ubuntu-14.04.4', 'ubuntu-15.10', 'ubuntu-16.04', 'debian-8.5.0'],
+                        help="Get server ISO for this Operative System. Def.: 'ubuntu-16.04'")
     group.add_argument("--tmp_mnt_dir",
                         help="Temporal directory to mount the original ISO file. Def.: /tmp/tmp_mnt_dir/")
     group.add_argument("--tmp_edit_dir",
@@ -77,7 +79,7 @@ def ib_parser():
     group = parser.add_argument_group("Target system networking")
 
     group.add_argument("--hostname",
-                        help="Set hostname for the target system. Def.: ubuntu")
+                        help="Set hostname for the target system. Def.: iso-builder")
     group.add_argument("--device",
                         help="Network device/interface name. Def.: eth0")
     group.add_argument("--bootproto", choices=['dhcp','static'],
@@ -109,6 +111,8 @@ def ib_parser():
     ## YES option
     args_dict['ans_yes']=args.yes
 
+    ## test option
+    args_dict['test_vm']=args.test
 
     ## Output ISO name 
     if not args.out_iso_name:
@@ -127,8 +131,7 @@ def ib_parser():
        if os.path.exists("/usr/lib/iso-builder/ks_template.cfg"):
           args.use_template = '/usr/lib/iso-builder/ks_template.cfg'
        else:
-          script_dir=os.path.dirname(os.path.realpath(__file__))
-          #print script_dir
+          #script_dir=os.path.dirname(os.path.realpath(__file__))
           args.use_template = script_dir + 'ks_template.cfg'
     args_dict['use_template']=args.use_template
 
@@ -144,12 +147,13 @@ def ib_parser():
 
     ## original ISO name
     if not args.iso_name:
-       args.iso_name = 'ubuntu-15.10-server-amd64.iso'
+       if not args.get_os:
+           args.iso_name = 'ubuntu-16.04-server-amd64.iso'
     args_dict['iso_name']=args.iso_name
 
     ## get/use the original iso for this Operative System/version
     if not args.get_os:
-       args.get_os = 'ubuntu-15.10'
+       args.get_os = 'ubuntu-16.04'
     args_dict['get_os']=args.get_os
 
     ## TMP Mount dir

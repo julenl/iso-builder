@@ -4,7 +4,6 @@ import os,sys
 import subprocess
 import re
 import shutil # for copying files
-#from distutils.dir_util import copy_tree # for copying whole directories
 
 
 
@@ -14,8 +13,10 @@ sys.path.append("lib") # Standalone install
 if os.path.exists("/usr/lib/iso-builder/lib"): # from deb pkg
    sys.path.append("/usr/lib/iso-builder/lib")
 
+script_dir=os.path.dirname(os.path.realpath(__file__))+"/"
+
 import parse_args
-args_dict=parse_args.ib_parser()
+args_dict=parse_args.ib_parser(script_dir)
 
 #print args_dict
 #print "ISO_DIR",args_dict['iso_name']
@@ -29,9 +30,9 @@ def is_installed(CMD):
     cmd_install='sudo apt-get -y install '
     try: 
         subprocess.check_output('which ' + CMD,shell=True)
+        #print 'Command ' + CMD + ' is available'
     except:
         sys.exit('ERROR: command '+ CMD + ' not found. \n Try:\n  ' + cmd_install + CMD)
-    #print 'Command ' + CMD + ' is available'
 
 #is_installed("ls")
 
@@ -66,19 +67,37 @@ def clean_all():
    
 ## Create the directories to mount and extract the ISO file
 def create_dirs():
-    #print "tmp_mnt_dir = " +tmp_mnt_dir
     if not os.path.exists(tmp_mnt_dir):
         os.makedirs(tmp_mnt_dir)
 
     if not os.path.exists(iso_dir):
         os.makedirs(iso_dir)
-    #subprocess.Popen('mkdir -p ' + tmp_mnt_dir ,shell=True).wait()
     #subprocess.Popen('mkdir -p ' + tmp_edit_dir ,shell=True).wait()
 
 is_installed('fuseiso')
 
 clean_all()
 create_dirs() 
+
+
+
+
+
+
+def download_file_as(url,file_path):
+    import requests
+    ## If no file_path given, assume it is an ISO
+    ## and store it in the iso_dir
+    if file_path == "":
+        file_path = iso_dir + url.split('/')[-1]
+    r = requests.get(url, stream=True)
+    with open(file_path, 'wb') as f:
+        for chunk in r.iter_content(chunk_size=1024): 
+            if chunk: 
+                f.write(chunk)
+    return file_path
+
+
 
 
 
@@ -95,23 +114,33 @@ def ensure_iso_file():
     if 'get_os' in globals():
         opsys=get_os.split("-")[0]    
         version=get_os.split("-")[1]
-        version_dir=".".join(version.split(".")[0:2])
-        iso_name="ubuntu-"+version+"-server-amd64.iso"
+        #version_dir=".".join(version.split(".")[0:2])
    
         for iso_n in iso_files:
             if opsys in iso_n and version in iso_n:
                print "ISO file " + iso_n + " found"
                download=False
 
-        if not 'download' in locals():
-            print "No iso file found for "+ opsys + version + ". Downloading..."
-            file_url="http://releases.ubuntu.com/" + version_dir + "/" + iso_name
-            print "Downloading from: ", file_url
-            file_path = iso_dir + "/" + iso_name
-            import urllib
-            os_file = urllib.URLopener()
-            os_file.retrieve(file_url, file_path)
+        ## Set ISO file name and download URL
+        if opsys == "ubuntu":
+            iso_name="ubuntu-"+version+"-server-amd64.iso"
+            file_url="http://releases.ubuntu.com/" + version + "/" + iso_name
+        elif opsys == "debian":
+            iso_name="debian-"+ version +"-amd64-netinst.iso"
+            #print "DDDEBIAN", version,iso_name
+            file_url="http://cdimage.debian.org/debian-cd/"+ version+ \
+                     "/amd64/iso-cd/"+ iso_name
+            #iso_name="debian-8.5.0-amd.iso"
+            #print "#####",iso_name, file_url
+        else:
+            sys.exit("ERROR: Operative System or version not supported")
+ 
 
+        if not 'download' in locals():
+            print "No ISO file found for "+ opsys + "-" + version +\
+                  ". Downloading..."
+            iso_name=download_file_as(file_url,"")
+ 
         return iso_name
 
 tmp=ensure_iso_file()
@@ -126,7 +155,7 @@ def check_integrity():
         version = iso_name.split("-")[1]
         version_dir = ".".join(version.split(".")[0:2])
         ## Fetch the cheksums file
-        sums_fname="Ubuntu_"+version+"MD5SUMS"
+        sums_fname="Ubuntu_"+version+"_MD5SUMS"
         sums_path=iso_dir+sums_fname
         if not os.path.exists(sums_path):
             print "Downloading " + sums_fname + " checksums file"
@@ -155,7 +184,8 @@ def check_integrity():
         if table_hash == this_hash:
             print "The " + iso_name + " file is OK"
         else:
-            sys.exit("ERROR: The " + iso_dir+iso_name + " file is corrupted. Remove it and run this script again.")
+            sys.exit("ERROR: The " + iso_dir+iso_name + " file is corrupted. "+\
+                     "Remove it and run this script again.")
 
 check_integrity()
 
@@ -169,13 +199,17 @@ def extract_iso():
     #copy_tree(tmp_mnt_dir, tmp_edit_dir)
     #shutil.copytree(tmp_mnt_dir, tmp_edit_dir, symlinks=False)
     print "###Copying files"
-    os.makedirs(tmp_edit_dir)
+    if not os.path.exists(tmp_edit_dir):
+        os.makedirs(tmp_edit_dir)
+
     ## Copy the content, not the directory. Otherwise we get a write permission error
-    subprocess.Popen('rsync -aq ' + tmp_mnt_dir + '* ' + tmp_edit_dir, shell=True).wait()
-    subprocess.Popen('rsync -aq ' + tmp_mnt_dir + '.disk ' + tmp_edit_dir, shell=True).wait()
+    subprocess.Popen('rsync -aq ' + tmp_mnt_dir + '* ' +\
+                      tmp_edit_dir, shell=True).wait()
+    subprocess.Popen('rsync -aq ' + tmp_mnt_dir + '.disk ' +\
+                      tmp_edit_dir, shell=True).wait()
     if 'cp_to_iso' in locals():
-        subprocess.Popen('rsync -aq ' + cp_to_iso + ' ' + tmp_edit_dir, shell=True).wait()
-    #subprocess.Popen('ls -la '+tmp_edit_dir, shell=True)
+        subprocess.Popen('rsync -aq ' + cp_to_iso + ' ' + \
+                         tmp_edit_dir, shell=True).wait()
     print "###Copying done!"
     subprocess.call(['chmod','-R','u+w', tmp_edit_dir]) 
 
@@ -191,13 +225,17 @@ def customize_kickstart():
     if not os.path.exists(args_dict['loc_kickstart_dir']):
         print 'Directory '+loc_kickstart_dir+' does not exist. Creating...'
         os.makedirs(args_dict['loc_kickstart_dir'])
- 
+
+    ## If use_template does not have a full path, use loc_kickstart_dir 
+    if "/" in use_template:
+        path_use_template= use_template
+    else:
+        path_use_template= loc_kickstart_dir + '/'+ use_template
+        
     ## Make sure that we have a copy of the ks_template on the templates folder 
-    path_use_template= loc_kickstart_dir + '/'+ 'ks_template.cfg'
     if not os.path.exists(path_use_template):
         print 'The file '+ path_use_template+' does not exist. Copying...'
-        shutil.copy2(use_template,
-                     path_use_template)
+        shutil.copy2(use_template, path_use_template)
 
     ## Copy the template file to create our own kickstart 
     #ks_file = loc_kickstart_dir+'/'+template_name
@@ -211,7 +249,7 @@ def customize_kickstart():
         print 'WARNING: the file ' + path_new_template + ' already exists.'
         print ' Do you want to overwrite it? Y = overwrite, N = rename, ' +\
               'everything else = exit'
-        print ans_yes
+
         if ans_yes: # ans_yes is the cmd arg for "-y"
             answer="Y"
         else:
@@ -229,10 +267,6 @@ def customize_kickstart():
            sys.exit("Exiting...")
 
  
-    #path_template_name=loc_kickstart_dir+'/'+template_name
-    #print "AAAAAAAA", path_template_name, path_new_template
-    #if not os.path.exists(path_template_name):
-    #     shutil.copy2(path_use_template,path_template_name) 
 
     ## Replace all the keys and values of the ks_values_dict on the new ks file 
     for key in ks_values_dict:
@@ -249,7 +283,12 @@ if new_template != '' and new_template != template_name:
 
 
 def edit_bootmenu():
-    ks_file=loc_kickstart_dir+'/'+template_name
+    ## If the template name has been given with full path
+    if "/" in template_name:
+        ks_file=template_name
+    else:
+        ks_file=loc_kickstart_dir+'/'+template_name
+
     shutil.copy2(ks_file,tmp_edit_dir)
     file_name=tmp_edit_dir + os.path.split(ks_file)[1]
 
@@ -260,19 +299,31 @@ def edit_bootmenu():
 
     ## Add the kickstart option as default
     menu_file = args_dict['tmp_edit_dir'] + 'isolinux/txt.cfg'
-    replace_in_file('^default .*',
-                    'default ks \\n'+
-                    'label ks \\n'+
-                    '  menu label ^KickStarted \\n'+
-                    '  kernel /install/vmlinuz\\n'+
-                    '  append  file=/cdrom/preseed/ubuntu-server.seed '+
-                    'vga=788 initrd=/install/initrd.gz quiet '+
-                    'ks=cdrom:/ks.cfg --- /',
-                    menu_file
-                   )
+   
+    menu_str=""
+    for line in open(menu_file,"r"):
+        if line.startswith("default"):
+            menu_str+="default ks\n"
+        elif line.startswith("label"):
+            menu_str+="label ks\n"
+        elif "menu label" in line:
+            tmp=line.split("label")[0]
+            menu_str+= tmp + " label ^KS\n"
+        elif "append" in line:
+            chunk=line.split("quiet")
+            menu_str+=chunk[0]+ "quiet ks=cdrom:/ks.cfg" + chunk[1]
+            break
+        else:
+            menu_str+=line
+
+    replace_in_file('^default .*', menu_str, menu_file)
+
 
 
 edit_bootmenu()
+
+
+
 
 def rebuild_iso():
     ## This command looks something like:
@@ -280,12 +331,34 @@ def rebuild_iso():
     subprocess.Popen('mkisofs -quiet -D -r -V "BOMSI_INSTALLER" -cache-inodes -J -l ' + 
                       '-b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot ' +
                       '-boot-load-size 4 -boot-info-table '+
-                      '-o ' + args_dict['out_iso_dir']+'/'+args_dict['out_iso_name'] + ' ' +
+                      '-o ' + args_dict['out_iso_dir']+args_dict['out_iso_name'] + ' ' +
                        args_dict['tmp_edit_dir'],
                      shell=True
                      ).wait()
 
 is_installed('genisoimage')
 rebuild_iso()
-print "###ISO file generated succesfully"
+print "###ISO file generated succesfully as: ", out_iso_dir+out_iso_name
+
+
+def install_vm():
+    print "### Installing the " + out_iso_dir+out_iso_name + " ISO file " +\
+          "as a KVM Virtual Machine."
+    VCPUS=2  #CPUs
+    VRAM=4092 #GB
+    DISK_SIZE=10 #GB
+    out_iso_pre=out_iso_name.split(".iso")[0]
+    CMD="virt-install -n " + out_iso_name + " --cpu host --vcpus " +\
+         str(VCPUS)  + " -r " +  str(VRAM) + " --os-type=linux --disk /var/lib/libvirt/images/" +\
+         out_iso_pre +".qcow2,device=disk,bus=virtio,size=" + str(DISK_SIZE) +\
+         ",sparse=true,format=qcow2 --vnc --noautoconsole -c " +\
+         out_iso_dir+out_iso_name + " --force"
+
+    subprocess.Popen(CMD,shell=True).wait()
+    
+
+if test_vm:
+    install_vm()
+
+
 
