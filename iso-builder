@@ -195,10 +195,15 @@ check_integrity()
 
 ## Extract the original ISO file into the tmp_edit_dir folder
 def extract_iso():
-    subprocess.Popen('fuseiso ' + iso_dir + iso_name + ' ' + tmp_mnt_dir, shell=True).wait()
-    #copy_tree(tmp_mnt_dir, tmp_edit_dir)
-    #shutil.copytree(tmp_mnt_dir, tmp_edit_dir, symlinks=False)
-    print "###Copying files"
+    ## Check if iso_name points to a file or a path
+    if "/" in iso_name:
+        path_to_iso = iso_name
+    else:
+        path_to_iso = iso_dir + iso_name
+
+    ## Mount the ISO file
+    subprocess.Popen('fuseiso ' + path_to_iso + ' ' + tmp_mnt_dir, shell=True).wait()
+    print "### Copying files"
     if not os.path.exists(tmp_edit_dir):
         os.makedirs(tmp_edit_dir)
 
@@ -207,16 +212,22 @@ def extract_iso():
                       tmp_edit_dir, shell=True).wait()
     subprocess.Popen('rsync -aq ' + tmp_mnt_dir + '.disk ' +\
                       tmp_edit_dir, shell=True).wait()
+
+    ## If cp_to_iso was given, copy that file/folder to the target
     if 'cp_to_iso' in locals():
         subprocess.Popen('rsync -aq ' + cp_to_iso + ' ' + \
                          tmp_edit_dir, shell=True).wait()
-    print "###Copying done!"
+
+    print "### Copying done!"
+
+    ## Ensure permissions
     subprocess.call(['chmod','-R','u+w', tmp_edit_dir]) 
 
+    ## Umount the ISO file
+    subprocess.Popen('fusermount -u ' + tmp_mnt_dir, shell=True)
 
 is_installed('rsync')
 extract_iso()
-
 
 
 
@@ -270,7 +281,6 @@ def customize_kickstart():
 
     ## Replace all the keys and values of the ks_values_dict on the new ks file 
     for key in ks_values_dict:
-        #print key.pattern, ks_values_dict[key], path_template_name
         replace_in_file(key.pattern, ks_values_dict[key], path_new_template)  
 
     return new_template
@@ -331,14 +341,14 @@ def rebuild_iso():
     subprocess.Popen('mkisofs -quiet -D -r -V "BOMSI_INSTALLER" -cache-inodes -J -l ' + 
                       '-b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot ' +
                       '-boot-load-size 4 -boot-info-table '+
-                      '-o ' + args_dict['out_iso_dir']+args_dict['out_iso_name'] + ' ' +
-                       args_dict['tmp_edit_dir'],
+                      '-o ' + out_iso_dir + out_iso_name + ' ' +
+                      tmp_edit_dir,
                      shell=True
                      ).wait()
 
 is_installed('genisoimage')
 rebuild_iso()
-print "###ISO file generated succesfully as: ", out_iso_dir+out_iso_name
+print "### ISO file generated succesfully as: ", out_iso_dir+out_iso_name
 
 
 def install_vm():
