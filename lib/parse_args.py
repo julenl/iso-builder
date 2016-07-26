@@ -32,7 +32,7 @@ def ib_parser(script_dir):
     group.add_argument("--ks_file",
                         help="Name of the kickstart template file. Def.: ks_file_template")
     group.add_argument("--template_dir",
-                        help="Directory containing kickstart templates. Def.: custom.iso")
+                        help="Directory containing kickstart templates. Def.: ~/ib_templates")
     group.add_argument("--out_iso_name",
                         help="Name of the custom ISO to be generated. Def.: custom.iso")
     group.add_argument("--iso_dir",
